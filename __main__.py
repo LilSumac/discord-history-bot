@@ -8,6 +8,11 @@ import json
 import time
 import os
 
+HIST_CONFIG_DIR = "config"
+HIST_CACHE_DIR = "data_cache"
+HIST_LOG_DIR = "logs"
+HIST_TOKEN_NAME = "token.txt"
+
 HIST_URL = "http://history.muffinlabs.com/date"
 HIST_NUM_ITEMS_DEFAULT = 5
 HIST_WAIT_TIME_DEFAULT = 10
@@ -67,23 +72,31 @@ class HistoryBot(discord.Client):
             data_stream.close()
             self.logger.debug("History fetched for %s.", cur_date_file)
 
-        if data is not None:
+        try:
             data_json = json.loads(data)
+        except (json.JSONDecodeError, TypeError) as err:
+            self.logger.warning(
+                "Received invalid JSON data for %s! Removing cache and aborting...",
+                cur_date_file
+            )
+            data_stream.close()
+            rmfile_safe(HIST_CACHE_DIR, cur_date_file)
 
-            data_obj = data_json.get("data")
-            if not data_obj:
-                return
+            await msg.channel.send("Something went wrong! Please try again.")
+            return
 
-            responses = self.create_response(cur_date_header, data_obj)
-            for response in responses:
-                await msg.channel.send(response)
-        else:
-            self.logger.warning("Data is None for %s!", cur_date_file)
+        data_obj = data_json.get("data")
+        if not data_obj:
+            return
+
+        responses = self.create_response(cur_date_header, data_obj)
+        for response in responses:
+            await msg.channel.send(response)
 
         self.sent_history[msg.channel.id] = time.time()
 
     def get_cache_data(self, cur_date):
-        data_path = get_local_path("data_cache", cur_date)
+        data_path = get_local_path(HIST_CACHE_DIR, cur_date)
         try:
             self.logger.debug("Attempting to read existing cache for %s...", cur_date)
             data_stream = open(data_path, "rb")
@@ -165,10 +178,17 @@ def get_local_path(*args):
     return cur_dir
 
 
-def mkdir_safe(dir_name):
+def mkdir_safe(*args):
     try:
-        os.mkdir(get_local_path(dir_name))
+        os.mkdir(get_local_path(*args))
     except FileExistsError:
+        pass
+
+
+def rmfile_safe(*args):
+    try:
+        os.unlink(get_local_path(*args))
+    except FileNotFoundError:
         pass
 
 
@@ -180,15 +200,21 @@ def main():
                         help="Print debug messages to console")
     args = parser.parse_args()
 
-    mkdir_safe("config")
-    mkdir_safe("data_cache")
-    mkdir_safe("logs")
+    mkdir_safe(HIST_CONFIG_DIR)
+    mkdir_safe(HIST_CACHE_DIR)
+    mkdir_safe(HIST_LOG_DIR)
 
     try:
-        token_stream = open(get_local_path("config", "token"), "r")
+        token_stream = open(get_local_path(HIST_CONFIG_DIR, HIST_TOKEN_NAME), "r")
         token = token_stream.read()
     except FileNotFoundError:
-        print("Unable to find a \'token\' file in the config folder!")
+        token_warning = \
+            "Didn't find a {0} file in the configuration folder, so one was created for you. "\
+            "Please place your bot token in {1}/{0} before continuing."
+        print(token_warning.format(HIST_TOKEN_NAME, HIST_CONFIG_DIR))
+
+        temp = open(get_local_path(HIST_CONFIG_DIR, HIST_TOKEN_NAME), "w")
+        temp.close()
         return
 
     logging.basicConfig(format="%(asctime)s - %(name)s [%(levelname)s]: %(message)s")
@@ -197,7 +223,10 @@ def main():
 
     logger.debug("Instantiating HistoryBot...")
     bot = HistoryBot(logger)
-    bot.run(token)
+    try:
+        bot.run(token)
+    except discord.LoginFailure:
+        print("The token provided was invalid.")
 
 
 if __name__ == "__main__":
