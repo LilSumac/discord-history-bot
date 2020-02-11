@@ -1,5 +1,5 @@
 .idea
 .venv
 __pycache__
-config/token
+config/token.txt
 data_cache
