@@ -1,5 +1,6 @@
 # discord-history-bot
-A Discord bot that will fetch 'Today in History' blurbs, as well as random quotes from historical figures.
+A Discord bot that will fetch 'Today in History' blurbs, as well as random quotes from historical
+figures.
 
 ## Roadmap
 - [x] Implement a fetch functionality for today's events.
@@ -15,6 +16,15 @@ A Discord bot that will fetch 'Today in History' blurbs, as well as random quote
 - ``discord.py`` Package
 
 ## Usage
+If one doesn't already exist, create a ``config`` folder in your repo and create a ``token.txt``
+file inside. This is where you'll put your bot token to authenticate with Discord.
+
+If you don't know what a bot token is or how to get one, refer to the many guides online for
+[creating a Discord bot](https://discordpy.readthedocs.io/en/latest/discord.html).
+
+The bot can be launched on your own machine/server for manual hosting by starting up the Python
+script:
+
 ``python discord-history-bot --debug_log=False``
 
 **Arguments:**
