@@ -19,10 +19,9 @@ HIST_WAIT_TIME_DEFAULT = 10
 
 
 class HistoryBot(discord.Client):
-    def __init__(self,
-                 logger,
-                 num_items=HIST_NUM_ITEMS_DEFAULT,
-                 wait_time=HIST_WAIT_TIME_DEFAULT):
+    def __init__(
+        self, logger, num_items=HIST_NUM_ITEMS_DEFAULT, wait_time=HIST_WAIT_TIME_DEFAULT
+    ):
         self.logger = logger
         self.num_items = num_items
         self.wait_time = wait_time
@@ -75,7 +74,7 @@ class HistoryBot(discord.Client):
         except (json.JSONDecodeError, TypeError) as err:
             self.logger.warning(
                 "Received invalid JSON data for %s! Removing cache and aborting...",
-                cur_date_file
+                cur_date_file,
             )
             data_stream.close()
             rmfile_safe(HIST_CACHE_DIR, cur_date_file)
@@ -103,7 +102,9 @@ class HistoryBot(discord.Client):
 
             # Check for invalid cache.
             if len(data) == 0:
-                self.logger.debug("Existing cache for %s is invalid, rewriting...", cur_date)
+                self.logger.debug(
+                    "Existing cache for %s is invalid, rewriting...", cur_date
+                )
                 data = None
                 data_stream.close()
                 data_stream = open(data_path, "wb")
@@ -192,10 +193,9 @@ def rmfile_safe(*args):
 
 def main():
     parser = argparse.ArgumentParser(description="Go back in time.")
-    parser.add_argument("--log_debug",
-                        default=False,
-                        type=bool,
-                        help="Print debug messages to console")
+    parser.add_argument(
+        "--log_debug", default=False, type=bool, help="Print debug messages to console",
+    )
     args = parser.parse_args()
 
     mkdir_safe(HIST_CONFIG_DIR)
@@ -206,9 +206,10 @@ def main():
         token_stream = open(get_local_path(HIST_CONFIG_DIR, HIST_TOKEN_NAME), "r")
         token = token_stream.read()
     except FileNotFoundError:
-        token_warning = \
-            "Didn't find a {0} file in the configuration folder, so one was created for you. "\
+        token_warning = (
+            "Didn't find a {0} file in the configuration folder, so one was created for you. "
             "Please place your bot token in {1}/{0} before continuing."
+        )
         print(token_warning.format(HIST_TOKEN_NAME, HIST_CONFIG_DIR))
 
         temp = open(get_local_path(HIST_CONFIG_DIR, HIST_TOKEN_NAME), "w")
