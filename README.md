@@ -27,7 +27,9 @@ If you don't know what a bot token is or how to get one, refer to the many guide
 The bot can be launched on your own machine/server for manual hosting by starting up the Python
 script:
 
-``python discord-history-bot --debug_log=False``
+```shell script
+python discord-history-bot --debug_log=False
+```
 
 **Arguments:**
 - (Optional) ``debug_log``: Whether or not to log debug-level messages. Default: ``False``
