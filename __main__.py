@@ -36,6 +36,10 @@ class HistoryBot(discord.Client):
         if msg.author == self.user:
             return
 
+        mentioned = discord.utils.get(msg.mentions, id=self.user.id)
+        if not mentioned:
+            return
+
         if msg.channel.id in self.sent_history:
             cur_time = time.time()
             last_time = self.sent_history[msg.channel.id]
@@ -47,12 +51,6 @@ class HistoryBot(discord.Client):
                     )
                 )
                 return
-
-        mentioned = discord.utils.get(msg.mentions, id=self.user.id)
-        if not mentioned:
-            return
-
-        self.logger.debug("Tagged in message from %s.", msg.author)
 
         cur_date = datetime.date.today()
         cur_date_file = cur_date.strftime("%m-%d")
