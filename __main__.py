@@ -1,5 +1,4 @@
 import argparse
-import datetime
 import requests
 import discord
 import logging
@@ -7,15 +6,20 @@ import random
 import json
 import time
 import os
+import re
+
+from datetime import datetime, timezone, date
 
 HIST_CONFIG_DIR = "config"
 HIST_CACHE_DIR = "data_cache"
 HIST_LOG_DIR = "logs"
 HIST_TOKEN_NAME = "token.txt"
 
-HIST_URL = "http://history.muffinlabs.com/date"
+HIST_URL = "https://history.muffinlabs.com/date"
 HIST_NUM_ITEMS_DEFAULT = 5
 HIST_WAIT_TIME_DEFAULT = 10
+
+BOT_GITHUB_URL = "https://github.com/LilSumac/discord-history-bot"
 
 
 class HistoryBot(discord.Client):
@@ -35,8 +39,8 @@ class HistoryBot(discord.Client):
         if msg.author == self.user:
             return
 
-        mentioned = discord.utils.get(msg.mentions, id=self.user.id)
-        if not mentioned:
+        msg_strip = msg.content.strip()
+        if msg_strip != "!today":
             return
 
         if msg.channel.id in self.sent_history:
@@ -51,12 +55,12 @@ class HistoryBot(discord.Client):
                 )
                 return
 
-        cur_date = datetime.date.today()
+        cur_date = date.today()
         cur_date_file = cur_date.strftime("%m-%d")
         cur_date_header = cur_date.strftime("%B %d")
 
-        (data, data_stream) = self.get_cache_data(cur_date_file)
-        if data is None:
+        (data, cache_file) = self.get_cache_data(cur_date_file)
+        if not data and cache_file:
             self.logger.debug("Fetching history for %s from API...", cur_date_file)
             req = requests.get(HIST_URL, stream=True)
             req.raise_for_status()
@@ -64,9 +68,9 @@ class HistoryBot(discord.Client):
             data = ""
             for chunk in req.iter_content(4096):
                 data = "{}{}".format(data, chunk.decode(encoding="utf-8"))
-                data_stream.write(chunk)
+                cache_file.write(chunk)
 
-            data_stream.close()
+            cache_file.close()
             self.logger.debug("History fetched for %s.", cur_date_file)
 
         try:
@@ -76,7 +80,6 @@ class HistoryBot(discord.Client):
                 "Received invalid JSON data for %s! Removing cache and aborting...",
                 cur_date_file,
             )
-            data_stream.close()
             rmfile_safe(HIST_CACHE_DIR, cur_date_file)
 
             await msg.channel.send("Something went wrong! Please try again.")
@@ -86,19 +89,21 @@ class HistoryBot(discord.Client):
         if not data_obj:
             return
 
-        responses = self.create_response(cur_date_header, data_obj)
-        for response in responses:
-            await msg.channel.send(response)
+        embeds = self.create_response(cur_date_header, data_obj)
+        for embed in embeds:
+            embed.timestamp = datetime.now(tz=timezone.utc)
+            await msg.channel.send(embed=embed)
 
         self.sent_history[msg.channel.id] = time.time()
 
     def get_cache_data(self, cur_date):
         data_path = get_local_path(HIST_CACHE_DIR, cur_date)
         try:
-            self.logger.debug("Attempting to read existing cache for %s...", cur_date)
+            self.logger.debug("Attempting to find existing cache for %s...", cur_date)
             data_stream = open(data_path, "rb")
             data_bytes = data_stream.read()
             data = data_bytes.decode(encoding="utf-8")
+            data_stream.close()
 
             # Check for invalid cache.
             if len(data) == 0:
@@ -106,9 +111,9 @@ class HistoryBot(discord.Client):
                     "Existing cache for %s is invalid, rewriting...", cur_date
                 )
                 data = None
-                data_stream.close()
                 data_stream = open(data_path, "wb")
             else:
+                data_stream = None
                 self.logger.debug("Found existing cache for %s.", cur_date)
         except FileNotFoundError:
             self.logger.debug("No existing cache found for %s.", cur_date)
@@ -127,47 +132,52 @@ class HistoryBot(discord.Client):
         if not events or not births or not deaths:
             return
 
-        response_list = list()
-        response_list.append("**{}: Let's look back...**\n\n".format(date_header))
-        response_list.append("{}\n".format("__**Events**__"))
+        events_embed = discord.Embed(
+            title="Events on {}".format(date_header),
+            description="",
+            color=discord.Color.from_rgb(51, 102, 255),
+        )
+        self.set_embed_content(events, events_embed)
+
+        births_embed = discord.Embed(
+            title="Births on {}".format(date_header),
+            description="",
+            color=discord.Color.from_rgb(0, 153, 51),
+        )
+        self.set_embed_content(births, births_embed)
+
+        deaths_embed = discord.Embed(
+            title="Deaths on {}".format(date_header),
+            description="",
+            color=discord.Color.from_rgb(204, 0, 0),
+        )
+        self.set_embed_content(deaths, deaths_embed)
+
+        return [events_embed, births_embed, deaths_embed]
+
+    def set_embed_content(self, event_list, embed):
         for _ in range(self.num_items):
-            event = random.choice(events)
-            response_list.append(
-                "[{}] {}\n".format(event.get("year", "???"), event.get("text", "???"))
-            )
-            events.remove(event)
+            event = random.choice(event_list)
+            linked_text = event.get("text", "???")
+            for link in event.get("links", dict()):
+                link_title = link.get("title", None)
+                if not link_title:
+                    continue
 
-        response_list.append("\n{}\n".format("__**Births**__"))
-        for _ in range(self.num_items):
-            birth = random.choice(births)
-            response_list.append(
-                "[{}] {}\n".format(birth.get("year", "???"), birth.get("text", "???"))
-            )
-            births.remove(birth)
+                match = re.search(link_title, linked_text, flags=re.I)
+                if match:
+                    linked_text = "{}[{}]({}){}".format(
+                        linked_text[:match.start()],
+                        link_title,
+                        link.get("link", "https://google.com"),
+                        linked_text[match.end():],
+                    )
 
-        response_list.append("\n{}\n".format("__**Deaths**__"))
-        for _ in range(self.num_items):
-            death = random.choice(deaths)
-            response_list.append(
-                "[{}] {}\n".format(death.get("year", "???"), death.get("text", "???"))
-            )
-            deaths.remove(death)
+            year_text = "**[{}]**".format(event.get("year", "???"))
+            embed.add_field(name=year_text, value=linked_text)
+            event_list.remove(event)
 
-        final_list = []
-        cur_str = ""
-        cur_len = 0
-        for response in response_list:
-            if cur_len + len(response) > 2000:
-                final_list.append(cur_str)
-                cur_str = ""
-                cur_len = 0
-
-            cur_str = "{}{}".format(cur_str, response)
-            cur_len += len(response)
-        if cur_str != "":
-            final_list.append(cur_str)
-
-        return final_list
+        embed.add_field(name="\u200b", value="[Github]({})".format(BOT_GITHUB_URL), inline=False)
 
 
 def get_local_path(*args):
@@ -194,7 +204,7 @@ def rmfile_safe(*args):
 def main():
     parser = argparse.ArgumentParser(description="Go back in time.")
     parser.add_argument(
-        "--log_debug", default=False, type=bool, help="Print debug messages to console",
+        "--debug_log", default=False, type=bool, help="Print debug messages to console",
     )
     args = parser.parse_args()
 
@@ -218,7 +228,7 @@ def main():
 
     logging.basicConfig(format="%(asctime)s - %(name)s [%(levelname)s]: %(message)s")
     logger = logging.getLogger("discord-history-bot")
-    logger.setLevel(logging.DEBUG if args.log_debug else logging.WARNING)
+    logger.setLevel(logging.DEBUG if args.debug_log else logging.WARNING)
 
     logger.debug("Instantiating HistoryBot...")
     bot = HistoryBot(logger)

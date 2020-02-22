@@ -7,10 +7,11 @@ figures.
 ## Roadmap
 - [x] Implement a fetch functionality for today's events.
 - [x] Cache recently-fetched data.
+- [x] Make Discord permissions better.
+- [ ] Allow refreshing of embed with reactions.
 - [ ] Implement configuration from both JSON file and command line.
 - [ ] Clear the cache and re-fetch if it ages to a certain point.
 - [ ] Implement quote-fetching functionality.
-- [ ] Make Discord permissions better.
 - [ ] Come up with a better name.
 
 ## Requirements
