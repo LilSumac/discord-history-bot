@@ -67,7 +67,7 @@ class HistoryBot(discord.Client):
                 if msg_pattern:
                     func(msg)
 
-    def get_history(self, msg, req_mode=HIST_MODE_ALL):
+    async def get_history(self, msg, req_mode=HIST_MODE_ALL):
         if msg.channel.id in self.sent_history:
             cur_time = time.time()
             last_time = self.sent_history[msg.channel.id]
@@ -121,7 +121,7 @@ class HistoryBot(discord.Client):
 
         self.sent_history[msg.channel.id] = time.time()
 
-    def honk(self, msg):
+    async def honk(self, msg):
         await msg.channel.send(":honk: THATCHER'S DEAD :honk:")
 
     def get_cache_data(self, cur_date):
