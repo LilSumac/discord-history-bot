@@ -60,12 +60,12 @@ class HistoryBot(discord.Client):
         msg_strip = msg.content.strip()
         msg_parts = msg_strip.split()
         if len(msg_parts) > 0 and msg_parts[0] in self.dispatchers:
-            self.dispatchers[msg_parts[0]](msg)
+            await self.dispatchers[msg_parts[0]](msg)
         else:
             for pattern, func in self.patterns.items():
                 msg_pattern = re.search(pattern, msg_strip)
                 if msg_pattern:
-                    func(msg)
+                    await func(msg)
 
     async def get_history(self, msg, req_mode=HIST_MODE_ALL):
         if msg.channel.id in self.sent_history:
