@@ -1,6 +1,6 @@
 .idea
 .venv
-__pycache__
 venv
-config/token.txt
-data_cache
+build
+discord_history_bot.egg-info
+dist

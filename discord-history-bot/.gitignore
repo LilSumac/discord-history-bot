@@ -1,0 +1,4 @@
+__pycache__
+config/token.txt
+data_cache
+logs

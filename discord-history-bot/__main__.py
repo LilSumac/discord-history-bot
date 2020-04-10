@@ -1,3 +1,4 @@
+import functools
 import argparse
 import requests
 import discord
@@ -19,6 +20,11 @@ HIST_URL = "https://history.muffinlabs.com/date"
 HIST_NUM_ITEMS_DEFAULT = 5
 HIST_WAIT_TIME_DEFAULT = 10
 
+HIST_MODE_EVENTS = 1
+HIST_MODE_BIRTHS = 2
+HIST_MODE_DEATHS = 4
+HIST_MODE_ALL = 8
+
 BOT_GITHUB_URL = "https://github.com/LilSumac/discord-history-bot"
 
 
@@ -30,6 +36,18 @@ class HistoryBot(discord.Client):
         self.num_items = num_items
         self.wait_time = wait_time
         self.sent_history = dict()
+
+        self.dispatchers = {
+            "!today": self.get_history,
+            "!events": functools.partial(self.get_history, req_mode=HIST_MODE_EVENTS),
+            "!births": functools.partial(self.get_history, req_mode=HIST_MODE_BIRTHS),
+            "!deaths": functools.partial(self.get_history, req_mode=HIST_MODE_DEATHS),
+        }
+
+        self.patterns = {
+            "thatcher": self.honk,
+        }
+
         super(HistoryBot, self).__init__()
 
     async def on_ready(self):
@@ -40,9 +58,16 @@ class HistoryBot(discord.Client):
             return
 
         msg_strip = msg.content.strip()
-        if msg_strip != "!today":
-            return
+        msg_parts = msg_strip.split()
+        if len(msg_parts) > 0 and msg_parts[0] in self.dispatchers:
+            self.dispatchers[msg_parts[0]](msg)
+        else:
+            for pattern, func in self.patterns.items():
+                msg_pattern = re.search(pattern, msg_strip)
+                if msg_pattern:
+                    func(msg)
 
+    def get_history(self, msg, req_mode=HIST_MODE_ALL):
         if msg.channel.id in self.sent_history:
             cur_time = time.time()
             last_time = self.sent_history[msg.channel.id]
@@ -95,6 +120,9 @@ class HistoryBot(discord.Client):
             await msg.channel.send(embed=embed)
 
         self.sent_history[msg.channel.id] = time.time()
+
+    def honk(self, msg):
+        await msg.channel.send(":honk: THATCHER'S DEAD :honk:")
 
     def get_cache_data(self, cur_date):
         data_path = get_local_path(HIST_CACHE_DIR, cur_date)
