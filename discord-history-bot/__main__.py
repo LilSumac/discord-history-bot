@@ -122,7 +122,7 @@ class HistoryBot(discord.Client):
         self.sent_history[msg.channel.id] = time.time()
 
     async def honk(self, msg):
-        await msg.channel.send(":honk: THATCHER'S DEAD :honk:")
+        await msg.channel.send("<:honk:644674976556908544> THATCHER'S DEAD <:honk:644674976556908544>")
 
     def get_cache_data(self, cur_date):
         data_path = get_local_path(HIST_CACHE_DIR, cur_date)
