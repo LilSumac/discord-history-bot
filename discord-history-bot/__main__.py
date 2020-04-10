@@ -63,7 +63,7 @@ class HistoryBot(discord.Client):
             await self.dispatchers[msg_parts[0]](msg)
         else:
             for pattern, func in self.patterns.items():
-                msg_pattern = re.search(pattern, msg_strip)
+                msg_pattern = re.search(pattern, msg_strip, re.M | re.I)
                 if msg_pattern:
                     await func(msg)
 
