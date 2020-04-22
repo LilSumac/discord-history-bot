@@ -107,7 +107,7 @@ class HistoryBot(discord.Client):
 
         msg_strip = msg.content.strip()
         args = msg_strip.split()
-        args.pop()  # Get rid of the first 'argument' (the command itself).
+        args.pop(0)     # Get rid of the first 'argument' (the command itself).
 
         req_date = []   # Contents will be [month, day].
         if len(args) == 0:
@@ -119,9 +119,9 @@ class HistoryBot(discord.Client):
             req_date.append(cur_day)
         else:
             if len(args) == 1:
-                date_pattern = re.search("^({}|\d{{1, 2}})\/(\d{{1, 2}})$".format(MONTH_REGEX), args[0])
+                date_pattern = re.search(r"^(\d{{1,2}})/(\d{{1,2}})$", args[0])
             elif len(args) == 2:
-                date_pattern = re.search("^({}|\d{{1, 2}})\s(\d{{1, 2}})$".format(MONTH_REGEX), args[0])
+                date_pattern = re.search("^({}|\d{{1,2}})\s(\d{{1,2}})$".format(MONTH_REGEX), " ".join(args))
             else:
                 await self.usage(msg)
                 return
@@ -131,11 +131,16 @@ class HistoryBot(discord.Client):
                 return
 
             try:
-                cur_month = self.get_month_from_str(date_pattern.group(1))
-                cur_day = date_pattern.group(3)
+                cur_month = date_pattern.group(1)
+                cur_day = date_pattern.group(2)
             except IndexError:
                 await self.usage(msg)
                 return
+
+            try:
+                int(cur_month)
+            except ValueError:
+                cur_month = self.get_month_from_str(cur_month.lower())
 
             if not cur_month or not cur_day:
                 await self.usage(msg)
@@ -185,7 +190,7 @@ class HistoryBot(discord.Client):
         if not data_obj:
             return
 
-        embeds = self.create_response(req_date_fmt, data_obj)
+        embeds = self.create_response(req_date_fmt, data_obj, req_mode)
         for embed in embeds:
             if embed:
                 embed.timestamp = datetime.now(tz=timezone.utc)
