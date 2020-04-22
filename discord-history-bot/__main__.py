@@ -119,7 +119,7 @@ class HistoryBot(discord.Client):
             req_date.append(cur_day)
         else:
             if len(args) == 1:
-                date_pattern = re.search(r"^(\d{{1,2}})/(\d{{1,2}})$", args[0])
+                date_pattern = re.search(r"^(\d{1,2})/(\d{1,2})$", args[0])
             elif len(args) == 2:
                 date_pattern = re.search("^({}|\d{{1,2}})\s(\d{{1,2}})$".format(MONTH_REGEX), " ".join(args))
             else:
