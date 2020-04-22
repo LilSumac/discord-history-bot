@@ -191,12 +191,14 @@ class HistoryBot(discord.Client):
             return
 
         embeds = self.create_response(req_date_fmt, data_obj, req_mode)
-        for embed in embeds:
-            if embed:
-                embed.timestamp = datetime.now(tz=timezone.utc)
-                await msg.channel.send(embed=embed)
-
-        self.sent_history[msg.channel.id] = time.time()
+        if embeds:
+            for embed in embeds:
+                if embed:
+                    embed.timestamp = datetime.now(tz=timezone.utc)
+                    await msg.channel.send(embed=embed)
+            self.sent_history[msg.channel.id] = time.time()
+        else:
+            await msg.channel.send("Huh... Nothing happened on that day.")
 
     async def honk(self, msg):
         await msg.channel.send("<:honk:644674976556908544> THATCHER'S DEAD <:honk:644674976556908544>")
@@ -240,9 +242,11 @@ class HistoryBot(discord.Client):
         events = json_data.get("Events")
         births = json_data.get("Births")
         deaths = json_data.get("Deaths")
-        events_embed = births_embed = deaths_embed = None
+        events_embed = None
+        births_embed = None
+        deaths_embed = None
 
-        if req_mode in (HIST_MODE_ALL, HIST_MODE_EVENTS):
+        if events and req_mode in (HIST_MODE_ALL, HIST_MODE_EVENTS):
             events_embed = discord.Embed(
                 title="Events on {}".format(date_header),
                 description="",
@@ -250,7 +254,7 @@ class HistoryBot(discord.Client):
             )
             self.set_embed_content(events, events_embed)
 
-        if req_mode in (HIST_MODE_ALL, HIST_MODE_BIRTHS):
+        if births and req_mode in (HIST_MODE_ALL, HIST_MODE_BIRTHS):
             births_embed = discord.Embed(
                 title="Births on {}".format(date_header),
                 description="",
@@ -258,7 +262,7 @@ class HistoryBot(discord.Client):
             )
             self.set_embed_content(births, births_embed)
 
-        if req_mode in (HIST_MODE_ALL, HIST_MODE_DEATHS):
+        if deaths and req_mode in (HIST_MODE_ALL, HIST_MODE_DEATHS):
             deaths_embed = discord.Embed(
                 title="Deaths on {}".format(date_header),
                 description="",
@@ -270,6 +274,9 @@ class HistoryBot(discord.Client):
 
     def set_embed_content(self, event_list, embed):
         for _ in range(self.num_items):
+            if len(event_list) == 0:
+                break
+
             event = random.choice(event_list)
             linked_text = event.get("text", "???")
             for link in event.get("links", dict()):
