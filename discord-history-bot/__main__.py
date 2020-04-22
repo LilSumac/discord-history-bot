@@ -16,7 +16,7 @@ HIST_CACHE_DIR = "data_cache"
 HIST_LOG_DIR = "logs"
 HIST_TOKEN_NAME = "token.txt"
 
-HIST_URL = "https://history.muffinlabs.com/date"
+HIST_URL = "https://history.muffinlabs.com/date/{}/{}"
 HIST_NUM_ITEMS_DEFAULT = 5
 HIST_WAIT_TIME_DEFAULT = 10
 
@@ -27,8 +27,33 @@ HIST_MODE_ALL = 8
 
 BOT_GITHUB_URL = "https://github.com/LilSumac/discord-history-bot"
 
+MONTH_TO_NUMBER = [
+    "jan|january",
+    "feb|february",
+    "mar|march",
+    "apr|april",
+    "may",
+    "jun|june",
+    "jul|july",
+    "aug|august",
+    "sept|september",
+    "oct|october",
+    "nov|november",
+    "dec|december",
+]
+MONTH_REGEX = "|".join(MONTH_TO_NUMBER)
+
 
 class HistoryBot(discord.Client):
+    @staticmethod
+    def get_month_from_str(month):
+        index = 0
+        while index < 12:
+            month_match = re.search("({})".format(MONTH_TO_NUMBER[index]), month)
+            if month_match:
+                return index + 1
+            index += 1
+
     def __init__(
         self, logger, num_items=HIST_NUM_ITEMS_DEFAULT, wait_time=HIST_WAIT_TIME_DEFAULT
     ):
@@ -74,21 +99,67 @@ class HistoryBot(discord.Client):
             passed = cur_time - last_time
             if passed < self.wait_time:
                 await msg.channel.send(
-                    "Please wait {0:d} seconds until trying again.".format(
+                    "Please wait {0:d} seconds until trying to get history.".format(
                         int(self.wait_time - passed)
                     )
                 )
                 return
 
-        cur_date = date.today()
-        cur_date_file = cur_date.strftime("%m-%d")
-        cur_date_header = cur_date.strftime("%B %d")
+        msg_strip = msg.content.strip()
+        args = msg_strip.split()
+        args.pop()  # Get rid of the first 'argument' (the command itself).
 
-        (data, cache_file) = self.get_cache_data(cur_date_file)
+        req_date = []   # Contents will be [month, day].
+        if len(args) == 0:
+            cur_date = date.today()
+            cur_month = cur_date.strftime("%m")
+            cur_day = cur_date.strftime("%d")
+
+            req_date.append(cur_month)
+            req_date.append(cur_day)
+        else:
+            if len(args) == 1:
+                date_pattern = re.search("^({}|\d{{1, 2}})\/(\d{{1, 2}})$".format(MONTH_REGEX), args[0])
+            elif len(args) == 2:
+                date_pattern = re.search("^({}|\d{{1, 2}})\s(\d{{1, 2}})$".format(MONTH_REGEX), args[0])
+            else:
+                await self.usage(msg)
+                return
+
+            if not date_pattern:
+                await self.usage(msg)
+                return
+
+            try:
+                cur_month = self.get_month_from_str(date_pattern.group(1))
+                cur_day = date_pattern.group(3)
+            except IndexError:
+                await self.usage(msg)
+                return
+
+            if not cur_month or not cur_day:
+                await self.usage(msg)
+                return
+
+            req_date.append(cur_month)
+            req_date.append(cur_day)
+
+        if len(req_date) != 2:
+            await self.usage(msg)
+            return
+
+        req_date_fmt = "{}-{}".format(req_date[0], req_date[1])
+
+        (data, cache_file) = self.get_cache_data(req_date_fmt)
         if not data and cache_file:
-            self.logger.debug("Fetching history for %s from API...", cur_date_file)
-            req = requests.get(HIST_URL, stream=True)
-            req.raise_for_status()
+            self.logger.debug("Fetching history for %s from API...", req_date_fmt)
+            req = requests.get(HIST_URL.format(req_date[0], req_date[1]), stream=True)
+
+            try:
+                req.raise_for_status()
+            except requests.exceptions.HTTPError:
+                await msg.channel.send("The server didn't like that! Did you give me a valid date?")
+                return
 
             data = ""
             for chunk in req.iter_content(4096):
@@ -96,16 +167,16 @@ class HistoryBot(discord.Client):
                 cache_file.write(chunk)
 
             cache_file.close()
-            self.logger.debug("History fetched for %s.", cur_date_file)
+            self.logger.debug("History fetched for %s.", req_date_fmt)
 
         try:
             data_json = json.loads(data)
         except (json.JSONDecodeError, TypeError) as err:
             self.logger.warning(
                 "Received invalid JSON data for %s! Removing cache and aborting...",
-                cur_date_file,
+                req_date_fmt,
             )
-            rmfile_safe(HIST_CACHE_DIR, cur_date_file)
+            rmfile_safe(HIST_CACHE_DIR, req_date_fmt)
 
             await msg.channel.send("Something went wrong! Please try again.")
             return
@@ -114,20 +185,27 @@ class HistoryBot(discord.Client):
         if not data_obj:
             return
 
-        embeds = self.create_response(cur_date_header, data_obj)
+        embeds = self.create_response(req_date_fmt, data_obj)
         for embed in embeds:
-            embed.timestamp = datetime.now(tz=timezone.utc)
-            await msg.channel.send(embed=embed)
+            if embed:
+                embed.timestamp = datetime.now(tz=timezone.utc)
+                await msg.channel.send(embed=embed)
 
         self.sent_history[msg.channel.id] = time.time()
 
     async def honk(self, msg):
         await msg.channel.send("<:honk:644674976556908544> THATCHER'S DEAD <:honk:644674976556908544>")
 
-    def get_cache_data(self, cur_date):
-        data_path = get_local_path(HIST_CACHE_DIR, cur_date)
+    async def usage(self, msg):
+        await msg.channel.send("Not really sure what you meant there...")
+        await msg.channel.send("I accept the following date formats!")
+        await msg.channel.send("<month> <date> eg. feb 13, 06 22")
+        await msg.channel.send("<month>/<date> eg. 02/13, 6/22")
+
+    def get_cache_data(self, req_date):
+        data_path = get_local_path(HIST_CACHE_DIR, req_date)
         try:
-            self.logger.debug("Attempting to find existing cache for %s...", cur_date)
+            self.logger.debug("Attempting to find existing cache for %s...", req_date)
             data_stream = open(data_path, "rb")
             data_bytes = data_stream.read()
             data = data_bytes.decode(encoding="utf-8")
@@ -136,50 +214,52 @@ class HistoryBot(discord.Client):
             # Check for invalid cache.
             if len(data) == 0:
                 self.logger.debug(
-                    "Existing cache for %s is invalid, rewriting...", cur_date
+                    "Existing cache for %s is invalid, rewriting...", req_date
                 )
                 data = None
                 data_stream = open(data_path, "wb")
             else:
                 data_stream = None
-                self.logger.debug("Found existing cache for %s.", cur_date)
+                self.logger.debug("Found existing cache for %s.", req_date)
         except FileNotFoundError:
-            self.logger.debug("No existing cache found for %s.", cur_date)
+            self.logger.debug("No existing cache found for %s.", req_date)
             data = None
             data_stream = open(data_path, "wb")
 
         return data, data_stream
 
-    def create_response(self, date_header, json_data):
+    def create_response(self, date_header, json_data, req_mode=HIST_MODE_ALL):
         if not json_data:
             return None
 
         events = json_data.get("Events")
         births = json_data.get("Births")
         deaths = json_data.get("Deaths")
-        if not events or not births or not deaths:
-            return
+        events_embed = births_embed = deaths_embed = None
 
-        events_embed = discord.Embed(
-            title="Events on {}".format(date_header),
-            description="",
-            color=discord.Color.from_rgb(51, 102, 255),
-        )
-        self.set_embed_content(events, events_embed)
+        if req_mode in (HIST_MODE_ALL, HIST_MODE_EVENTS):
+            events_embed = discord.Embed(
+                title="Events on {}".format(date_header),
+                description="",
+                color=discord.Color.from_rgb(51, 102, 255),
+            )
+            self.set_embed_content(events, events_embed)
 
-        births_embed = discord.Embed(
-            title="Births on {}".format(date_header),
-            description="",
-            color=discord.Color.from_rgb(0, 153, 51),
-        )
-        self.set_embed_content(births, births_embed)
+        if req_mode in (HIST_MODE_ALL, HIST_MODE_BIRTHS):
+            births_embed = discord.Embed(
+                title="Births on {}".format(date_header),
+                description="",
+                color=discord.Color.from_rgb(0, 153, 51),
+            )
+            self.set_embed_content(births, births_embed)
 
-        deaths_embed = discord.Embed(
-            title="Deaths on {}".format(date_header),
-            description="",
-            color=discord.Color.from_rgb(204, 0, 0),
-        )
-        self.set_embed_content(deaths, deaths_embed)
+        if req_mode in (HIST_MODE_ALL, HIST_MODE_DEATHS):
+            deaths_embed = discord.Embed(
+                title="Deaths on {}".format(date_header),
+                description="",
+                color=discord.Color.from_rgb(204, 0, 0),
+            )
+            self.set_embed_content(deaths, deaths_embed)
 
         return [events_embed, births_embed, deaths_embed]
 
