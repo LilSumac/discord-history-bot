@@ -43,6 +43,15 @@ MONTH_TO_NUMBER = [
 ]
 MONTH_REGEX = "|".join(MONTH_TO_NUMBER)
 
+PROGRESS_QUIPS = [
+    "I'm so proud of you!",
+    "You're almost there!",
+    "Use your time wisely!",
+    "Cherish whatever time you have!",
+    "One day at a time.",
+    "Let's get through this together.",
+]
+
 
 class HistoryBot(discord.Client):
     @staticmethod
@@ -67,6 +76,7 @@ class HistoryBot(discord.Client):
             "!events": functools.partial(self.get_history, req_mode=HIST_MODE_EVENTS),
             "!births": functools.partial(self.get_history, req_mode=HIST_MODE_BIRTHS),
             "!deaths": functools.partial(self.get_history, req_mode=HIST_MODE_DEATHS),
+            "!progress": self.get_progress,
         }
 
         self.patterns = {
@@ -131,16 +141,13 @@ class HistoryBot(discord.Client):
                 return
 
             try:
-                cur_month = date_pattern.group(1)
                 cur_day = date_pattern.group(2)
+                cur_month = int(date_pattern.group(1))  # Use int to check if month is word or number.
+            except ValueError:
+                cur_month = self.get_month_from_str(date_pattern.group(1).lower())  # Convert word month to number.
             except IndexError:
                 await self.usage(msg)
                 return
-
-            try:
-                int(cur_month)
-            except ValueError:
-                cur_month = self.get_month_from_str(cur_month.lower())
 
             if not cur_month or not cur_day:
                 await self.usage(msg)
@@ -199,6 +206,31 @@ class HistoryBot(discord.Client):
             self.sent_history[msg.channel.id] = time.time()
         else:
             await msg.channel.send("Huh... Nothing happened on that day.")
+
+    async def get_progress(self, msg):
+        try:
+            cur_date = date.today()
+            cur_day = float(cur_date.strftime("%j"))
+            cur_year = cur_date.strftime("%Y")
+        except ValueError:
+            await msg.channel.send("Huh... I got a wonky date!")
+            return
+
+        if cur_day >= 365:  # Handle both regular and leap years (366).
+            ratio = 1.0
+        else:
+            ratio = min(cur_day / 365.0, 1.0)
+
+        response = "Our progress through {}:\n".format(cur_year)
+        if ratio == 1.0:
+            response += "🎉🎊 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 100%! 🎊🎉\n"
+        else:
+            num_filled = int(ratio * 15)
+            num_empty = 15 - num_filled
+            response += ("▓" * num_filled) + ("░" * num_empty) + " {}%\n".format(int(ratio * 100.0))
+        response += random.choice(PROGRESS_QUIPS)
+
+        await msg.channel.send(response)
 
     async def honk(self, msg):
         await msg.channel.send("<:honk:644674976556908544> THATCHER'S DEAD <:honk:644674976556908544>")
